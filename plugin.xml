@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         id="org.sannet.RequestValidatorPackage.RequestValidator"
+         name="org.sannet.RequestValidatorPackage.RequestValidator"
+         point="org.adempiere.base.ModelValidator">
+      <listener
+            class="org.sannet.RequestValidatorPackage.RequestValidator">
+      </listener>
+   </extension>
+
+</plugin>

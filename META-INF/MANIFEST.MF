@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Ticket
+Bundle-SymbolicName: org.sannet.ticket;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Vendor: Simon Puyosa
+Automatic-Module-Name: org.sannet.ticket
+Bundle-RequiredExecutionEnvironment: JavaSE-11
+Require-Bundle: org.adempiere.base.callout,
+ org.adempiere.base
+Import-Package: org.osgi.framework;version="1.10.0"
+Bundle-Activator: org.sannet.activator.MyActivator
