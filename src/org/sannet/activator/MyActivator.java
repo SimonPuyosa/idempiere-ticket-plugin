@@ -32,8 +32,10 @@ public class MyActivator implements BundleActivator {
                     try {
                         DB.executeUpdate(sql, null);
                     } catch (Exception e) {
-                        System.err.println("Error executing SQL: " + sql);
-                        e.printStackTrace();
+                        if (!"SELECT update_sequences();".equals(sql)) {
+	                        System.out.println("Error executing SQL: " + sql);
+	                        e.printStackTrace();
+                    	}
                     }
                 }
             }
