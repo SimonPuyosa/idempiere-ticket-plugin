@@ -39,13 +39,18 @@ public class RequestValidator implements ModelValidator {
     }
     
     private String getStatusNameFromRequestStatus(int requestTypeID) {
-        String sql = "SELECT Name FROM R_Status WHERE R_RequestStatus_ID=?";
+        String sql = "SELECT Name FROM R_Status WHERE R_Status_ID=?";
         return DB.getSQLValueString(null, sql, requestTypeID);
     }
 
     private String getDocumentNoFromDB() {
-        String sql = "SELECT MAX(CAST(DocumentNo AS INT)) + 1 FROM R_Request";
+        String sql = "SELECT MAX(CAST(DocumentNo AS INT)) FROM R_Request";
         return DB.getSQLValueString(null, sql);
+    }
+    
+    private String getRequestTypeName(int requestTypeID) {
+        String sql = "SELECT Name FROM R_RequestType WHERE R_RequestType_ID = ?";
+        return DB.getSQLValueString(null, sql, requestTypeID);
     }
 
     private void sendEmail(String recipientEmail, String subject, String body) {
@@ -70,13 +75,13 @@ public class RequestValidator implements ModelValidator {
         if (po instanceof MRequest) {
             MRequest request = (MRequest) po;
             // Obtener el R_RequestType_ID desde AD_SysConfig
-            int requestTypeID = MSysConfig.getIntValue("Ticket_request_type_ID", 0, Env.getAD_Client_ID(Env.getCtx()));
+            String requestTypeName = getRequestTypeName(request.getR_RequestType_ID());
 
             // Obtener el userID desde AD_SysConfig
             int supportID = MSysConfig.getIntValue("Ticket_support_user_ID", 0, Env.getAD_Client_ID(Env.getCtx()));
 
             // Verifica si el tipo de request es 101
-            if (request.getR_RequestType_ID() == requestTypeID) {
+            if ("Ticket de soporte".equals(requestTypeName)) {
                 int userModifyingID = Env.getAD_User_ID(Env.getCtx()); // Usuario que está modificando
                 int requestCreatorID = request.getCreatedBy(); // Usuario que creó el request
 
@@ -113,15 +118,15 @@ public class RequestValidator implements ModelValidator {
 
                     // Preparar el contenido del correo
                     String subject = (request.getR_Request_ID() == 0)
-                            ? "Notificación de creación del Request #" + documentNo
-                            : "Notificación de cambios en el Request #" + documentNo;
+                            ? "Notificacion de creacion del Request #" + documentNo
+                            : "Notificacion de cambios en el Request #" + documentNo;
                     StringBuilder body = new StringBuilder();
 
                     // Información del request
                     body.append("Estimado usuario,").append("\n\n");
                     String actionMessage = (request.getR_Request_ID() == 0)
                             ? "Se ha creado un nuevo Request #" + documentNo + "."
-                            : "Se ha realizado una modificación en el Request #" + documentNo + ".";
+                            : "Se ha realizado una modificacion en el Request #" + documentNo + ".";
                     
                     body.append(actionMessage).append("\n\n").append("Detalles del request:").append("\n\n");
 
