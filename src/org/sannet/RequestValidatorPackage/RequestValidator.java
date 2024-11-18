@@ -89,13 +89,78 @@ public class RequestValidator implements ModelValidator {
                 if (type == ModelValidator.TYPE_BEFORE_NEW || type == ModelValidator.TYPE_BEFORE_CHANGE) {
                     log.info("Se está guardando o editando un request: " + request.getDocumentNo());
 
-                    // Verifica si el estatus ha cambiado
-                    boolean statusChanged = request.is_ValueChanged("R_Status_ID");
-
                     // Obtener el número del documento
                     String documentNo = request.getDocumentNo();
                     if (documentNo == null || documentNo.isEmpty()) {
                         documentNo = getDocumentNoFromDB(); // Obtener de la base de datos si está vacío
+                    }
+                    
+                    // Verifica si el estatus ha cambiado
+                    boolean statusChanged = request.is_ValueChanged("R_Status_ID");
+                  
+                    int currentStatusID = request.getR_Status_ID();
+                    Integer oldStatusIDValue = statusChanged ? (Integer) request.get_ValueOld("R_Status_ID") : null;
+                    int oldStatusID = (oldStatusIDValue != null) ? oldStatusIDValue : currentStatusID;
+                    System.out.println("currentStatusID: " + currentStatusID);
+                    // Verifica si el usuario que está modificando es el soporte
+                    if (userModifyingID == supportID) {
+                        // Si el estado NO es 102 (Close) ni 103 (Close)
+                        if (currentStatusID != 1000001 && currentStatusID != 1000004) {
+                            boolean isResultEmpty = request.getResult() == null || request.getResult().isEmpty();
+                            // Cambiar el resumen del request a un espacio en blanco y el request no esta en blanco 
+                            if (!isResultEmpty) {
+                            	request.setSummary(" ");
+                            }
+                        }
+                    }
+                   
+                    System.out.println("oldStatusID: " + oldStatusID);
+                    // Validar las condiciones para modificar workedhours
+                    if (oldStatusID == 1000003) { // Estado específico
+                        boolean workedHoursChanged = request.is_ValueChanged("workedhours");
+                        System.out.println("workedHoursChanged: " + workedHoursChanged);
+
+                        if (!workedHoursChanged) { // Si no ha habido cambios en workedhours
+                            // Obtener la fecha de última modificación anterior
+                        	java.sql.Timestamp lastUpdatedPrevious = request.getUpdated();
+
+                            // Guardar para actualizar 'Updated' en la base de datos
+                            if (!request.save()) {
+                                log.warning("Error al guardar la solicitud.");
+                                System.out.println("Error al guardar la solicitud.");
+                                return null;
+                            }
+
+                        	// Obtener el nuevo valor de lastUpdated
+                        	java.sql.Timestamp lastUpdatedNew = request.getUpdated();
+
+                            if (lastUpdatedPrevious == null || lastUpdatedNew == null) {
+                                log.warning("No se pudo obtener la fecha de última modificación.");
+                                return null;
+                            }
+
+                        	System.out.println("lastUpdatedPrevious (DB): " + lastUpdatedPrevious);
+                        	System.out.println("lastUpdatedNew (Actual): " + lastUpdatedNew);
+
+                            // Calcular la diferencia en horas y minutos
+                            long differenceInMillis = lastUpdatedNew.getTime() - lastUpdatedPrevious.getTime();
+                            long totalMinutes = differenceInMillis / (1000 * 60); // Total de minutos
+                            long hours = totalMinutes / 60; // Horas completas
+                            long remainingMinutes = totalMinutes % 60; // Minutos restantes
+
+                            // Redondear minutos hacia arriba en intervalos de 30
+                            double roundedMinutes = (remainingMinutes > 0 && remainingMinutes <= 30) ? 0.5 : (remainingMinutes > 30 ? 1.0 : 0.0);
+
+                            // Calcular el nuevo valor de workedhours
+                            double newWorkedHours = hours + roundedMinutes;
+                            
+                            System.out.println("newWorkedHours: " + newWorkedHours);
+
+                            // Actualizar el valor en el request
+                            request.set_ValueOfColumn("workedhours", newWorkedHours);
+
+                            log.info("Worked hours actualizado a: " + newWorkedHours);
+                        }
                     }
                     
                     // Definir el destinatario del correo
