@@ -5,6 +5,9 @@ import org.osgi.framework.BundleContext;
 import org.compiere.util.DB;
 import java.io.InputStream;
 import java.util.Scanner;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+
 
 public class MyActivator implements BundleActivator {
     @Override
@@ -12,13 +15,31 @@ public class MyActivator implements BundleActivator {
         // Activación del Request Validator
         System.out.println("Request Validator activated.");
 
-        // Ejecutar sentencias SQL estándar
-        String sqlPath = "/META-INF/sql/install.sql";
-        executeSQLFile(sqlPath);
+        // Verificar si se cumple la condición
+        if (!checkCondition()) {
+            // Ejecutar sentencias SQL estándar
+            String sqlPath = "/META-INF/sql/install.sql";
+            executeSQLFile(sqlPath);
 
-        // Ejecutar comandos psql (DO $$ ... END $$;)
-        String psqlPath = "/META-INF/sql/install_psql.sql";
-        executePSQLFile(psqlPath);
+            // Ejecutar comandos psql (DO $$ ... END $$;)
+            String psqlPath = "/META-INF/sql/install_psql.sql";
+            executePSQLFile(psqlPath);
+        } else {
+            System.out.println("Condition not met. SQL scripts will not be executed.");
+        }
+    }
+
+    private boolean checkCondition() {
+        String conditionQuery = 
+            "SELECT 1 FROM ad_sysconfig WHERE ad_client_id = 0 AND ad_org_id = 0 AND \"name\" IN ('Ticket_request_type_ID', 'Ticket_support_user_ID')";
+        try (PreparedStatement pstmt = DB.prepareStatement(conditionQuery, null);
+            ResultSet rs = pstmt.executeQuery()) {
+            return rs.next(); // Si hay resultados, la condición se cumple
+        } catch (Exception e) {
+            System.err.println("Error checking condition: " + e.getMessage());
+            e.printStackTrace();
+            return false; // Si ocurre un error, no ejecutamos los scripts
+        }
     }
 
     // Método para ejecutar sentencias SQL estándar
