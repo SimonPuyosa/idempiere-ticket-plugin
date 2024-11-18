@@ -124,15 +124,8 @@ public class RequestValidator implements ModelValidator {
                             // Obtener la fecha de última modificación anterior
                         	java.sql.Timestamp lastUpdatedPrevious = request.getUpdated();
 
-                            // Guardar para actualizar 'Updated' en la base de datos
-                            if (!request.save()) {
-                                log.warning("Error al guardar la solicitud.");
-                                System.out.println("Error al guardar la solicitud.");
-                                return null;
-                            }
-
-                        	// Obtener el nuevo valor de lastUpdated
-                        	java.sql.Timestamp lastUpdatedNew = request.getUpdated();
+                            // Usar el tiempo actual para simular el nuevo 'Updated'
+                            java.sql.Timestamp lastUpdatedNew = new java.sql.Timestamp(System.currentTimeMillis());
 
                             if (lastUpdatedPrevious == null || lastUpdatedNew == null) {
                                 log.warning("No se pudo obtener la fecha de última modificación.");
