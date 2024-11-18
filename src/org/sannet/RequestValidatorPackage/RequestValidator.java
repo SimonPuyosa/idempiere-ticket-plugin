@@ -1,5 +1,6 @@
 package org.sannet.RequestValidatorPackage;
 
+import java.math.BigDecimal;
 import org.compiere.model.MClient;
 import org.compiere.model.MRequest;
 import org.compiere.model.MSysConfig;
@@ -150,7 +151,7 @@ public class RequestValidator implements ModelValidator {
                             System.out.println("newWorkedHours: " + newWorkedHours);
 
                             // Actualizar el valor en el request
-                            request.set_ValueOfColumn("workedhours", newWorkedHours);
+                            request.set_ValueOfColumn("workedhours", BigDecimal.valueOf(newWorkedHours));
 
                             log.info("Worked hours actualizado a: " + newWorkedHours);
                         }
