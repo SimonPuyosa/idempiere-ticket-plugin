@@ -78,144 +78,145 @@ public class RequestValidator implements ModelValidator {
             // Obtener el R_RequestType_ID desde AD_SysConfig
             String requestTypeName = getRequestTypeName(request.getR_RequestType_ID());
 
+            // Verifica si el tipo de request es 101
+            if (!"Ticket de soporte".equals(requestTypeName)) {
+                return null;
+            }
+
             // Obtener el userID desde AD_SysConfig
             int supportID = MSysConfig.getIntValue("Ticket_support_user_ID", 0, Env.getAD_Client_ID(Env.getCtx()));
+            int userModifyingID = Env.getAD_User_ID(Env.getCtx()); // Usuario que está modificando
+            int requestCreatorID = request.getCreatedBy(); // Usuario que creó el request
 
-            // Verifica si el tipo de request es 101
-            if ("Ticket de soporte".equals(requestTypeName)) {
-                int userModifyingID = Env.getAD_User_ID(Env.getCtx()); // Usuario que está modificando
-                int requestCreatorID = request.getCreatedBy(); // Usuario que creó el request
+            // Verifica si se está creando o editando el request
+            if (type != ModelValidator.TYPE_BEFORE_NEW && type != ModelValidator.TYPE_BEFORE_CHANGE) {
+                return null;
+            }
+            log.info("Se está guardando o editando un request: " + request.getDocumentNo());
+            System.out.println("Se está guardando o editando un request: " + request.getDocumentNo());
 
-                // Verifica si se está creando o editando el request
-                if (type == ModelValidator.TYPE_BEFORE_NEW || type == ModelValidator.TYPE_BEFORE_CHANGE) {
-                    log.info("Se está guardando o editando un request: " + request.getDocumentNo());
-
-                    // Obtener el número del documento
-                    String documentNo = request.getDocumentNo();
-                    if (documentNo == null || documentNo.isEmpty()) {
-                        documentNo = getDocumentNoFromDB(); // Obtener de la base de datos si está vacío
+            // Obtener el número del documento
+            String documentNo = request.getDocumentNo();
+            
+            // Verifica si el estatus ha cambiado
+            boolean statusChanged = request.is_ValueChanged("R_Status_ID");
+            
+            int currentStatusID = request.getR_Status_ID();
+            // Verifica si el usuario que está modificando es el soporte
+            if (userModifyingID == supportID) {
+                // Si el estado NO es 102 (Close) ni 103 (Close)
+                if (currentStatusID != 1000001) {
+                    boolean isResultEmpty = request.getResult() == null || request.getResult().isEmpty();
+                    // Cambiar el resumen del request a un espacio en blanco y el request no esta en blanco 
+                    if (!isResultEmpty) {
+                        request.setSummary(" ");
                     }
-                    
-                    // Verifica si el estatus ha cambiado
-                    boolean statusChanged = request.is_ValueChanged("R_Status_ID");
-                  
-                    int currentStatusID = request.getR_Status_ID();
-                    Integer oldStatusIDValue = statusChanged ? (Integer) request.get_ValueOld("R_Status_ID") : null;
-                    int oldStatusID = (oldStatusIDValue != null) ? oldStatusIDValue : currentStatusID;
-                    System.out.println("currentStatusID: " + currentStatusID);
-                    // Verifica si el usuario que está modificando es el soporte
-                    if (userModifyingID == supportID) {
-                        // Si el estado NO es 102 (Close) ni 103 (Close)
-                        if (currentStatusID != 1000001 && currentStatusID != 1000004) {
-                            boolean isResultEmpty = request.getResult() == null || request.getResult().isEmpty();
-                            // Cambiar el resumen del request a un espacio en blanco y el request no esta en blanco 
-                            if (!isResultEmpty) {
-                            	request.setSummary(" ");
-                            }
-                        }
-                    }
-                   
-                    System.out.println("oldStatusID: " + oldStatusID);
-                    // Validar las condiciones para modificar workedhours
-                    if (oldStatusID == 1000003) { // Estado específico
-                        boolean workedHoursChanged = request.is_ValueChanged("workedhours");
-                        System.out.println("workedHoursChanged: " + workedHoursChanged);
-
-                        if (!workedHoursChanged) { // Si no ha habido cambios en workedhours
-                            // Obtener la fecha de última modificación anterior
-                        	java.sql.Timestamp lastUpdatedPrevious = request.getUpdated();
-
-                            // Usar el tiempo actual para simular el nuevo 'Updated'
-                            java.sql.Timestamp lastUpdatedNew = new java.sql.Timestamp(System.currentTimeMillis());
-
-                            if (lastUpdatedPrevious == null || lastUpdatedNew == null) {
-                                log.warning("No se pudo obtener la fecha de última modificación.");
-                                return null;
-                            }
-
-                        	System.out.println("lastUpdatedPrevious (DB): " + lastUpdatedPrevious);
-                        	System.out.println("lastUpdatedNew (Actual): " + lastUpdatedNew);
-
-                            // Calcular la diferencia en horas y minutos
-                            long differenceInMillis = lastUpdatedNew.getTime() - lastUpdatedPrevious.getTime();
-                            long totalMinutes = differenceInMillis / (1000 * 60); // Total de minutos
-                            long hours = totalMinutes / 60; // Horas completas
-                            long remainingMinutes = totalMinutes % 60; // Minutos restantes
-
-                            // Redondear minutos hacia arriba en intervalos de 30
-                            double roundedMinutes = (remainingMinutes > 0 && remainingMinutes <= 30) ? 0.5 : (remainingMinutes > 30 ? 1.0 : 0.0);
-
-                            // Calcular el nuevo valor de workedhours
-                            double newWorkedHours = hours + roundedMinutes;
-                            
-                            System.out.println("newWorkedHours: " + newWorkedHours);
-
-                            // Actualizar el valor en el request
-                            request.set_ValueOfColumn("workedhours", BigDecimal.valueOf(newWorkedHours));
-
-                            log.info("Worked hours actualizado a: " + newWorkedHours);
-                        }
-                    }
-                    
-                    // Definir el destinatario del correo
-                    int recipientID;
-                    if (userModifyingID != supportID) {
-                        recipientID = supportID;
-                    } else {
-                        recipientID = requestCreatorID;
-                    }
-
-                    // Obtener el correo del destinatario
-                    String recipientEmail = getUserEmail(recipientID);
-                    if (recipientEmail == null || recipientEmail.isEmpty()) {
-                        log.warning("No se pudo encontrar un correo válido para el usuario con ID: " + recipientID);
-                        return null; // Si no hay correo válido, no se envía el correo
-                    }
-                    
-                    // Obtener el nombre del estado actual
-                    String statusName = getStatusNameFromRequestStatus(request.getR_Status_ID());
-
-                    // Preparar el contenido del correo
-                    String subject = (request.getR_Request_ID() == 0)
-                            ? "Notificacion de creacion del Request #" + documentNo
-                            : "Notificacion de cambios en el Request #" + documentNo;
-                    StringBuilder body = new StringBuilder();
-
-                    // Información del request
-                    body.append("Estimado usuario,").append("\n\n");
-                    String actionMessage = (request.getR_Request_ID() == 0)
-                            ? "Se ha creado un nuevo Request #" + documentNo + "."
-                            : "Se ha realizado una modificacion en el Request #" + documentNo + ".";
-                    
-                    body.append(actionMessage).append("\n\n").append("Detalles del request:").append("\n\n");
-
-                    // Mostrar el ID del Request solo si no es 0
-                    if (request.getR_Request_ID() != 0) {
-                        body.append("ID del Request: ").append(request.getR_Request_ID()).append("\n");
-                    }
-                    
-                    body.append("Usuario que creo el request: ").append(getUserName(requestCreatorID)).append("\n");
-                    body.append("Usuario que esta modificando el request: ").append(getUserName(userModifyingID)).append("\n");
-                    body.append("Fecha de creacion del request: ").append(request.getCreated()).append("\n");
-                    body.append("Resumen del request: ").append(request.getSummary()).append("\n");
-
-                    // Verificar si el campo Result no está vacío
-                    if (request.getResult() != null && !request.getResult().isEmpty()) {
-                        body.append("Resultado del request: ").append(request.getResult()).append("\n");
-                    }
-                    
-                    if (statusChanged) {
-                        body.append("El estado del request ha cambiado a: ").append(statusName).append("\n");
-                    } else {
-                        body.append("El estado del request no ha cambiado.\n");
-                    }
-
-                    // Enviar el correo
-                    sendEmail(recipientEmail, subject, body.toString());
                 }
             }
+
+            if (documentNo != null) {
+                Integer oldStatusID = statusChanged ? (Integer) request.get_ValueOld("R_Status_ID") : currentStatusID;
+                boolean workedHoursChanged = request.is_ValueChanged("workedhours");
+                // Validar las condiciones para modificar workedhours
+                if (oldStatusID == 1000003 && !workedHoursChanged) { // Estado específico
+                    // Obtener la fecha de última modificación anterior
+                    java.sql.Timestamp lastUpdatedPrevious = request.getUpdated();
+
+                    // Usar el tiempo actual para simular el nuevo 'Updated'
+                    java.sql.Timestamp lastUpdatedNew = new java.sql.Timestamp(System.currentTimeMillis());
+
+                    if (lastUpdatedPrevious == null || lastUpdatedNew == null) {
+                        log.warning("No se pudo obtener la fecha de última modificación.");
+                        System.out.println("No se pudo obtener la fecha de última modificación.");
+                        return null;
+                    }
+                    
+                    // Calcular la diferencia en horas y minutos
+                    long differenceInMillis = lastUpdatedNew.getTime() - lastUpdatedPrevious.getTime();
+                    long totalMinutes = differenceInMillis / (1000 * 60); // Total de minutos
+                    long hours = totalMinutes / 60; // Horas completas
+                    long remainingMinutes = totalMinutes % 60; // Minutos restantes
+
+                    // Redondear minutos hacia arriba en intervalos de 30
+                    double roundedMinutes = (remainingMinutes > 0 && remainingMinutes <= 30) ? 0.5 : (remainingMinutes > 30 ? 1.0 : 0.0);
+
+                    // Calcular el nuevo valor de workedhours
+                    double newWorkedHours = hours + roundedMinutes;
+                
+                    // Actualizar el valor en el request
+                    request.set_ValueOfColumn("workedhours", BigDecimal.valueOf(newWorkedHours));
+
+                    log.info("Worked hours actualizado a: " + newWorkedHours);
+                    System.out.println("Worked hours actualizado a: " + newWorkedHours);
+                }
+            }
+            
+            
+            // Definir el destinatario del correo
+            int recipientID;
+            if (userModifyingID != supportID) {
+                recipientID = supportID;
+            } else {
+                recipientID = requestCreatorID;
+            }
+
+            // Obtener el correo del destinatario
+            String recipientEmail = getUserEmail(recipientID);
+            if (recipientEmail == null || recipientEmail.isEmpty()) {
+                log.warning("No se pudo encontrar un correo válido para el usuario con ID: " + recipientID);
+                return null; // Si no hay correo válido, no se envía el correo
+            }
+            
+            // Obtener el nombre del estado actual
+            String statusName = getStatusNameFromRequestStatus(request.getR_Status_ID());
+
+            if (documentNo == null || documentNo.isEmpty()) {
+                documentNo = getDocumentNoFromDB();
+                if (documentNo == null || documentNo.isEmpty()) {
+                    documentNo = "";
+                }
+            }
+
+            // Preparar el contenido del correo
+            String subject = (request.getR_Request_ID() == 0)
+                    ? "Notificacion de creacion del Request #" + documentNo
+                    : "Notificacion de cambios en el Request #" + documentNo;
+            StringBuilder body = new StringBuilder();
+
+            // Información del request
+            body.append("Estimado usuario,").append("\n\n");
+            String actionMessage = (request.getR_Request_ID() == 0)
+                    ? "Se ha creado un nuevo Request #" + documentNo + "."
+                    : "Se ha realizado una modificacion en el Request #" + documentNo + ".";
+            
+            body.append(actionMessage).append("\n\n").append("Detalles del request:").append("\n\n");
+
+            // Mostrar el ID del Request solo si no es 0
+            if (request.getR_Request_ID() != 0) {
+                body.append("ID del Request: ").append(request.getR_Request_ID()).append("\n");
+            }
+            
+            body.append("Usuario que creo el request: ").append(getUserName(requestCreatorID)).append("\n");
+            body.append("Usuario que esta modificando el request: ").append(getUserName(userModifyingID)).append("\n");
+            body.append("Fecha de creacion del request: ").append(request.getCreated()).append("\n");
+            body.append("Resumen del request: ").append(request.getSummary()).append("\n");
+
+            // Verificar si el campo Result no está vacío
+            if (request.getResult() != null && !request.getResult().isEmpty()) {
+                body.append("Resultado del request: ").append(request.getResult()).append("\n");
+            }
+            
+            if (statusChanged) {
+                body.append("El estado del request ha cambiado a: ").append(statusName).append("\n");
+            } else {
+                body.append("El estado del request no ha cambiado.\n");
+            }
+
+            // Enviar el correo
+            sendEmail(recipientEmail, subject, body.toString());
         }
         return null;
+    
     }
     
     @Override
